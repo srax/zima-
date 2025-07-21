@@ -40,6 +40,7 @@ dependencies:
   uuid: ^4.5.1
   http: ^0.13.5 # HTTP client for API calls
   video_player: ^2.5.1 # Plugin to play video content
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
