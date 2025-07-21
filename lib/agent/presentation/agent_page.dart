@@ -33,6 +33,8 @@ class _AgentPageState extends State<AgentPage> {
     super.initState();
     _video = RTCVideoRenderer();
     _video.initialize().then((_) => _initAgentAndBootstrap());
+    _video.onFirstFrameRendered = () => debugPrint('✅ first video frame');
+    _video.onResize = () => setState(() {}); // reflect resolution changes
   }
 
   Future<void> _initAgentAndBootstrap() async {
@@ -57,6 +59,20 @@ class _AgentPageState extends State<AgentPage> {
         _loading = false;
       });
     }
+  }
+
+  String _patchSdpForAppleH264(String sdp) {
+    const h264Line = 'a=rtpmap:102 H264/90000';
+    const fmtpLine =
+        'a=fmtp:102 packetization-mode=1;profile-level-id=42e01f;level-asymmetry-allowed=1';
+
+    // If the offer already contains a fmtp for PT 102 we leave it untouched.
+    final hasFmtp102 = RegExp(r'^a=fmtp:102 .*', multiLine: true).hasMatch(sdp);
+    if (sdp.contains(h264Line) && !hasFmtp102) {
+      // Inject the fmtp line immediately after the rtpmap line.
+      sdp = sdp.replaceFirst(h264Line, '$h264Line\r\n$fmtpLine');
+    }
+    return sdp;
   }
 
   /* ───────────────── bootstrap ───────────────── */
@@ -99,14 +115,40 @@ class _AgentPageState extends State<AgentPage> {
         streamResponse['ice_servers'] ?? [],
       );
 
-      _pc = await createPeerConnection({'iceServers': _ice});
+      _pc = await createPeerConnection({
+        'iceServers': _ice,
+        'sdpSemantics': 'unified-plan', // Better cross-platform behaviour
+      });
+
+      // Explicitly tell the peer connection we want to RECEIVE audio & video.
+      await _pc!.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+      );
+      await _pc!.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
+        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
+      );
+
       _pc!
         ..onIceCandidate = _onIce
         ..onIceConnectionState = (st) => debugPrint('ICE $st');
       _pc!.onTrack = (e) {
-        if (e.streams.isNotEmpty) {
+        debugPrint(
+          'onTrack: kind=${e.track.kind}, streams=${e.streams.length}',
+        );
+        // Ensure we only attach the media stream when a *video* track is
+        // available. On some platforms (notably iOS) the audio track may
+        // arrive first which can cause a black frame if the renderer is
+        // initialised too early.
+        final hasVideo = e.track.kind == 'video';
+        if (hasVideo && e.streams.isNotEmpty) {
           _video.srcObject = e.streams.first;
-          setState(() {}); // rebuild for first frame
+          // Re-initialise after attaching the stream – on some macOS/iOS builds
+          // the underlying RTCMTLVideoView doesn’t produce frames unless the
+          // renderer is (re)initialised with an active track.
+          _video.initialize().catchError((_) {});
+          setState(() {}); // rebuild for first video frame
         }
       };
 
@@ -114,8 +156,11 @@ class _AgentPageState extends State<AgentPage> {
       final remoteSdp = offerObj is Map
           ? offerObj['sdp'] as String
           : offerObj as String;
+
+      final patchedSdp = _patchSdpForAppleH264(remoteSdp);
+
       await _pc!.setRemoteDescription(
-        RTCSessionDescription(remoteSdp, 'offer'),
+        RTCSessionDescription(patchedSdp, 'offer'),
       );
 
       final answer = await _pc!.createAnswer();

@@ -28,5 +28,14 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Needed to render remote video.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Needed to play agent audio.</string>
 </dict>
 </plist>
