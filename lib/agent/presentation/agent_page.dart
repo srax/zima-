@@ -1,8 +1,10 @@
+import 'package:deepfake/agent/apis/transcript_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../auth/presentation/screens/login_screen.dart';
 import '../apis/did_api.dart';
 import '../../auth/apis/auth_api.dart';
+import 'package:record/record.dart' as rec;
 
 class AgentPage extends StatefulWidget {
   final String agentId;
@@ -16,6 +18,10 @@ class _AgentPageState extends State<AgentPage> {
   final _txt = TextEditingController();
   late RTCVideoRenderer _video;
   RTCPeerConnection? _pc;
+  late final TranscriptService _ts;
+  // Use concrete AudioRecorder from record 5.x
+  final rec.AudioRecorder _recorder = rec.AudioRecorder();
+  bool _recActive = false;
 
   String? _chatId, _streamId, _sessionId;
   List<Map<String, dynamic>> _ice = [];
@@ -31,10 +37,30 @@ class _AgentPageState extends State<AgentPage> {
   @override
   void initState() {
     super.initState();
+    _ts = TranscriptService(onTranscript: _onTranscript);
     _video = RTCVideoRenderer();
-    _video.initialize().then((_) => _initAgentAndBootstrap());
+    _video.initialize().then((_) async {
+      await _ts.connect(); // ➊ open WS and start_session
+      await _initAgentAndBootstrap();
+    });
     _video.onFirstFrameRendered = () => debugPrint('✅ first video frame');
     _video.onResize = () => setState(() {}); // reflect resolution changes
+  }
+
+  /* ───── Transcript → chat message ───── */
+  Future<void> _onTranscript(String text) async {
+    if (text.trim().isEmpty || _chatId == null) return;
+    try {
+      await DidApi.sendMessage(
+        widget.agentId,
+        _chatId!,
+        _streamId!,
+        _sessionId!,
+        text,
+      );
+    } catch (_) {
+      /* ignore – UI already shows send errors */
+    }
   }
 
   Future<void> _initAgentAndBootstrap() async {
@@ -212,6 +238,27 @@ class _AgentPageState extends State<AgentPage> {
     }
   }
 
+  /* ───── Voice button handlers ───── */
+  Future<void> _toggleVoice() async {
+    if (_recActive) {
+      await _recorder.stop();
+      _ts.mute(); // ➋ stop stream → mute → transcription
+    } else {
+      // Start microphone capture and forward PCM chunks to the transcript
+      // service while un-muted.
+      final stream = await _recorder.startStream(
+        const rec.RecordConfig(
+          encoder: rec.AudioEncoder.pcm16bits,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+      );
+      stream.listen(_ts.sendAudioChunk);
+      _ts.unmute(); // ➌ unmute first, then chunks will flow
+    }
+    setState(() => _recActive = !_recActive);
+  }
+
   /* ───────────────── helpers ───────────────── */
   void _kickToLogin() {
     if (!mounted) return;
@@ -224,6 +271,8 @@ class _AgentPageState extends State<AgentPage> {
   /* ───────────────── cleanup ───────────────── */
   @override
   void dispose() {
+    _ts.dispose();
+    _recorder.dispose();
     DidApi.deleteStream(widget.agentId, _streamId ?? '');
     _pc?.close();
     _video.dispose();
@@ -273,6 +322,14 @@ class _AgentPageState extends State<AgentPage> {
                   IconButton(
                     icon: const Icon(Icons.send),
                     onPressed: _loading || _error != null ? null : _send,
+                  ),
+                  IconButton(
+                    tooltip: 'Hold to talk',
+                    icon: Icon(
+                      _recActive ? Icons.mic : Icons.mic_none,
+                      color: _recActive ? Colors.red : null,
+                    ),
+                    onPressed: _loading || _error != null ? null : _toggleVoice,
                   ),
                 ],
               ),

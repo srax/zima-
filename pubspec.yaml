@@ -41,6 +41,10 @@ dependencies:
   http: ^0.13.5 # HTTP client for API calls
   video_player: ^2.5.1 # Plugin to play video content
   shared_preferences: ^2.2.2
+  socket_io_client: ^2.0.0
+  record: ^6.0.0
+  permission_handler: ^11.3.0
+  flutter_launcher_icons: ^0.13.1 # latest at July 2025
 
 dev_dependencies:
   flutter_test:
@@ -51,7 +55,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^4.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -93,3 +97,16 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  image_path: "icon.png" # path to your master icon
+  android: true # generates mipmaps
+  ios: true # adds to Asset Catalog
+  macos:
+    generate: true
+  windows:
+    generate: true
+  linux:
+    generate: true
+  web:
+    generate: true
