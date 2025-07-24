@@ -24,17 +24,24 @@ class _MainPageState extends State<MainPage> {
     final pref = await SharedPreferences.getInstance();
     final saved = pref.getString('jwt');
     AuthApi.setToken(saved);
-    return AuthApi.verify();
+    try {
+      return await AuthApi.verify();
+    } catch (_) {
+      // Any exception (network, unauthenticated, etc.) should result in navigating
+      // to the login page rather than leaving the app stuck on the loader.
+      return false;
+    }
   }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<bool>(
     future: _future,
     builder: (c, snap) {
-      if (!snap.hasData) {
+      if (snap.connectionState != ConnectionState.done) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
-      return snap.data == true ? const HomePage() : const LoginScreen();
+      final isAuthed = snap.data ?? false;
+      return isAuthed ? const HomePage() : const LoginScreen();
     },
   );
 }

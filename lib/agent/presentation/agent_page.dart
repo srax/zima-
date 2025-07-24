@@ -23,6 +23,9 @@ class _AgentPageState extends State<AgentPage> {
   final rec.AudioRecorder _recorder = rec.AudioRecorder();
   bool _recActive = false;
 
+  // Flag to ensure the auto-sent "hello" happens only once per page lifecycle.
+  bool _initialHelloSent = false;
+
   String? _chatId, _streamId, _sessionId;
   List<Map<String, dynamic>> _ice = [];
 
@@ -198,6 +201,8 @@ class _AgentPageState extends State<AgentPage> {
         answer.sdp!,
       );
 
+      await _sendInitialHello();
+
       if (mounted) setState(() => _loading = false);
     } on UnauthenticatedException {
       _kickToLogin();
@@ -235,6 +240,28 @@ class _AgentPageState extends State<AgentPage> {
       );
     } on UnauthenticatedException {
       _kickToLogin();
+    }
+  }
+
+  /* ─── Automatic initial message ─── */
+  Future<void> _sendInitialHello() async {
+    if (_initialHelloSent ||
+        _chatId == null ||
+        _streamId == null ||
+        _sessionId == null) {
+      return;
+    }
+    try {
+      await DidApi.sendMessage(
+        widget.agentId,
+        _chatId!,
+        _streamId!,
+        _sessionId!,
+        'hello',
+      );
+      _initialHelloSent = true;
+    } catch (e) {
+      debugPrint('Failed to send initial hello: $e');
     }
   }
 
