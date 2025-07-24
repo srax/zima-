@@ -6,5 +6,5 @@
 
 const String kServerUrl = String.fromEnvironment(
   'SERVER_URL',
-  defaultValue: 'http://159.223.172.164:4000',
+  defaultValue: 'https://api.deepfake.petaproc.com',
 );
