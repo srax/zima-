@@ -287,6 +287,20 @@ class _AgentPageState extends State<AgentPage> {
   }
 
   /* ───────────────── helpers ───────────────── */
+  // Converts internal S3 URLs ("s3://bucket/key") to a public HTTPS endpoint
+  String _toPublicUrl(String url) {
+    if (url.startsWith('s3://')) {
+      final withoutScheme = url.substring('s3://'.length);
+      final firstSlash = withoutScheme.indexOf('/');
+      if (firstSlash > 0) {
+        final bucket = withoutScheme.substring(0, firstSlash);
+        final key = withoutScheme.substring(firstSlash + 1);
+        return 'https://$bucket.s3.amazonaws.com/$key';
+      }
+    }
+    return url; // already public
+  }
+
   void _kickToLogin() {
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
