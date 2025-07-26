@@ -1,0 +1,73 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# Error Handling and Logging Standards
+
+## AppLogger Usage
+- **Use AppLogger for all logging** - do not use `print()` statements
+- **Choose appropriate log levels:**
+  - `info` - high-level events (e.g., "User tapped X", "Chat session started")
+  - `error` - exceptions or failures with error object and stack trace
+  - `debug` - development-time details that can be turned off in production
+  - `performance` - timing operations or recording latency
+
+## Structured Log Content
+- **Include relevant context** in logs
+- **Use dedicated methods** like `logApiError(method, endpoint, error, {statusCode, duration})`
+- **Use `logPerformance(operation, duration, metrics)`** for performance-critical sections
+- **Follow consistent logging format** across the team
+
+## Centralized Error Handling
+- **Catch unexpected errors** in data layer (API calls, etc.)
+- **Log exceptions via AppLogger** and return error states to application layer
+- **Update state to indicate errors** in application layer (notifiers/providers)
+- **Show user-friendly feedback** for errors that affect user actions
+
+## User Feedback Mechanisms
+- **Use centralized dialog or snackbar** for error messages
+- **Generic error dialog utility** - `AppDialog.showError(context, message)`
+- **Global scaffold messenger** for snackbars
+- **Uniform style and wording** across the app
+
+## Error Handling Strategy
+```dart
+// Data layer
+try {
+  final response = await apiCall();
+  return response;
+} catch (e) {
+  AppLogger.error('API call failed', error: e, context: 'fetchAgents');
+  return ErrorState('Failed to load agents');
+}
+
+// Application layer
+final result = await dataService.fetchAgents();
+if (result is ErrorState) {
+  state = state.copyWith(errorMessage: result.message);
+  AppDialog.showError(context, result.message);
+}
+```
+
+## Performance Monitoring
+- **Include performance metrics** for critical interactions
+- **Track response times** from AI after sending messages
+- **Monitor voice recording processing** times
+- **Identify bottlenecks** through performance logging
+
+## No Swallowing Errors
+- **Every catch should either log or propagate** the error
+- **Log at the point of catch** with as much context as possible
+- **Use judgment for user-facing vs non-user-facing errors**
+- **Always log for developers** even if handling gracefully for users
+
+## Testing Error Paths
+- **Test failure conditions** (no internet, server errors, etc.)
+- **Verify error UI behavior** under various failure scenarios
+- **Use centralized logging and error UI** for manageable error scenarios
+description:
+globs:
+alwaysApply: false
+---

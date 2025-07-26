@@ -1,0 +1,55 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# Dart & Flutter Coding Conventions
+
+## Naming Conventions
+- **Classes:** UpperCamelCase (e.g., `ChatController`, `RecordingService`)
+- **Variables and functions:** lowerCamelCase (e.g., `isRecording`, `fetchAgents()`)
+- **Constants:** ALL_CAPS with underscores (e.g., `MAX_RETRY_ATTEMPTS`)
+- **Files and directories:** snake_case (e.g., `my_business_notifier.dart`)
+- **Avoid abbreviations** that are not obvious - clarity over brevity
+
+## Project-Specific Naming
+- **Provider files:** `<feature>_providers.dart` format
+- **Widget files:** End with type suffix (e.g., `_card.dart`, `_form.dart`, `_screen.dart`)
+- **One class per file** unless smaller private class is tightly tied to main class
+
+## Formatting
+- **Use Dart's official formatter** (`dart format`)
+- **Indentation:** 2 spaces
+- **Line lengths:** 80-100 characters (let formatter handle wrapping)
+- **Use trailing commas** in Flutter widget constructors and collection literals
+
+## Flutter Best Practices
+- **Use const constructors** and widgets wherever possible
+- **Prefer StatelessWidget or ConsumerWidget** over StatefulWidget unless local mutable state is needed
+- **Avoid unnecessary rebuilds** by using keys and refactoring large widgets
+- **Follow composition over inheritance** - build UI by composing widgets
+
+## Modern Dart Features
+- **Use recent Dart language features** when applicable
+- **Null-safety practices** - unwrap optionals safely, provide default values
+- **Avoid deprecated widgets/properties** - use newer Flutter APIs
+- **Use enhanced enums or pattern matching** over older verbose patterns
+
+## Comments and Documentation
+- **Write clear comments** for complex logic
+- **Public classes and functions** should have dartdoc comments
+- **Label end-of widgets** in comments for readability in complex trees
+- **Avoid obvious or redundant comments** - strive for self-documenting code
+- **Use TODO comments sparingly** - prefix with name or task reference
+
+## Testing Conventions
+- **Test files mirror widget structure**
+- **Name test files** after the file under test (e.g., `chat_controller_test.dart`)
+- **Ensure tests run on all platforms** if applicable
+
+## Performance Guidelines
+- **Use const constructors** to reduce rebuilds
+- **Break large widgets** into smaller, focused components
+- **Use keys appropriately** for list items and stateful widgets
+- **Avoid expensive operations** in build methods

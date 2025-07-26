@@ -1,0 +1,73 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# State Management with Riverpod
+
+## Standard Approach
+- **Use Riverpod (Preferred):** Utilize StateNotifierProvider for complex state objects and logic
+- **No Code Generation:** Do not use code-gen tools like Freezed or build_runner for state classes
+- **Manual Implementation:** All state classes and equality logic should be written and maintained manually
+
+## Provider Structure
+Follow consistent naming and file organization in each module's `application/` folder:
+
+```
+lib/<feature>/application/
+├── <feature>_state.dart // State class(es)
+├── <feature>_notifier.dart // StateNotifier implementation
+└── <feature>_providers.dart // Riverpod providers exposing the notifier
+```
+
+## Naming Conventions
+- StateNotifier class: `<Feature>Notifier`
+- State class: `<Feature>State`
+- Provider file: `<feature>_providers.dart`
+
+## Provider References
+- Store the `ref` (ProviderRef) inside your notifier to access other providers
+- Use `ref.read()` or `ref.watch()` within notifier methods to get dependencies
+- Be mindful of not creating tight coupling - only use for legitimate cross-cutting concerns
+
+## State Patterns
+- Each state class should clearly represent the UI state needed
+- Avoid global mutable state - use providers for any state that needs to be shared
+- For ephemeral widget-only state, prefer local state inside the widget
+- Do not use singletons or global variables for state
+
+## Example State Class
+```dart
+class ChatState {
+  final List<Message> messages;
+  final bool isRecording;
+  final bool isLoading;
+  final String? errorMessage;
+
+  const ChatState({
+    this.messages = const [],
+    this.isRecording = false,
+    this.isLoading = false,
+    this.errorMessage,
+  });
+
+  ChatState copyWith({
+    List<Message>? messages,
+    bool? isRecording,
+    bool? isLoading,
+    String? errorMessage,
+  }) {
+    return ChatState(
+      messages: messages ?? this.messages,
+      isRecording: isRecording ?? this.isRecording,
+      isLoading: isLoading ?? this.isLoading,
+      errorMessage: errorMessage ?? this.errorMessage,
+    );
+  }
+}
+```
+description:
+globs:
+alwaysApply: false
+---

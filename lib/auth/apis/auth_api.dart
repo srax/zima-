@@ -21,12 +21,12 @@ class AuthApi {
     if (_token != null) 'Authorization': 'Bearer $_token',
   };
 
-  static Future<String> register(String email, String pass) async {
+  static Future<String> register(String username, String pass) async {
     final res = await http
         .post(
           Uri.parse('$_base/auth/register'),
           headers: _hdr(),
-          body: jsonEncode({'email': email, 'password': pass}),
+          body: jsonEncode({'username': username, 'password': pass}),
         )
         .then(_checked);
     final tok = jsonDecode(res.body)['access_token'] as String;
@@ -34,12 +34,12 @@ class AuthApi {
     return tok;
   }
 
-  static Future<String> login(String email, String pass) async {
+  static Future<String> login(String username, String pass) async {
     final res = await http
         .post(
           Uri.parse('$_base/auth/login'),
           headers: _hdr(),
-          body: jsonEncode({'email': email, 'password': pass}),
+          body: jsonEncode({'username': username, 'password': pass}),
         )
         .then(_checked);
     final tok = jsonDecode(res.body)['access_token'] as String;

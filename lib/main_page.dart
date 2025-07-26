@@ -1,47 +1,72 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'auth/apis/auth_api.dart';
-import 'home/presentation/home_page.dart';
+import 'package:provider/provider.dart';
+import 'auth/application/providers/auth_provider.dart';
 import 'auth/presentation/screens/login_screen.dart';
+import 'home/presentation/home_page.dart';
 
-class MainPage extends StatefulWidget {
+class MainPage extends StatelessWidget {
   const MainPage({super.key});
 
   @override
-  State<MainPage> createState() => _MainPageState();
-}
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        // Show loading while checking authentication
+        if (authProvider.isLoading) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
 
-class _MainPageState extends State<MainPage> {
-  late Future<bool> _future;
+        // Show error if there's an authentication issue
+        if (authProvider.error != null) {
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Authentication Error: ${authProvider.error}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      authProvider.clearError();
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(
+                          builder: (context) => const LoginScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text('Go to Login'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
 
-  @override
-  void initState() {
-    super.initState();
-    _future = _checkAuth();
+        // Route based on authentication status
+        if (authProvider.isAuthenticated) {
+          return const HomePage();
+        } else {
+          // Navigate to login if not authenticated
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (context.mounted) {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+              );
+            }
+          });
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+      },
+    );
   }
-
-  Future<bool> _checkAuth() async {
-    final pref = await SharedPreferences.getInstance();
-    final saved = pref.getString('jwt');
-    AuthApi.setToken(saved);
-    try {
-      return await AuthApi.verify();
-    } catch (_) {
-      // Any exception (network, unauthenticated, etc.) should result in navigating
-      // to the login page rather than leaving the app stuck on the loader.
-      return false;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<bool>(
-    future: _future,
-    builder: (c, snap) {
-      if (snap.connectionState != ConnectionState.done) {
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      }
-      final isAuthed = snap.data ?? false;
-      return isAuthed ? const HomePage() : const LoginScreen();
-    },
-  );
 }

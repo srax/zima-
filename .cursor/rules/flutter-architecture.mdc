@@ -1,0 +1,66 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+
+# Flutter Project Architecture Standards
+
+## Clean Architecture Structure
+This project follows a **3-layer clean architecture** with standardized module structure:
+
+```
+lib/
+├── app/ # Shared core (common models, utilities, constants, widgets)
+├── <feature>/ # e.g. chat/, voice/, business/, profile/, etc.
+│   ├── application/ # Business logic (state notifiers, providers)
+│   ├── data/ # Data layer (models, DTOs, repositories, services)
+│   └── presentation/ # UI layer (screens, pages)
+└── main.dart # App entry point
+```
+
+## Layer Responsibilities
+
+- **Application:** Contains state management and business logic (Riverpod providers, controllers, state notifier classes)
+- **Data:** Contains data models, DTOs, mappers, repositories, and low-level services for external communication
+- **Presentation:** Contains UI code - primarily screens/pages that render the interface for the feature
+
+## Widget Organization
+All reusable UI components are organized under `lib/app/presentation/widgets/`:
+A central `app/` folder mirrors this structure for shared, cross-cutting components.
+
+```
+app/presentation/widgets/
+├── common/ # Common widgets used across modules
+│   ├── bars/ # Shared app bars, navigation bars, toolbars
+│   ├── cards/ # Generic card widgets
+│   ├── views/ # Reusable view components
+│   ├── forms/ # Common form fields and form widgets
+│   ├── screens/ # Base screen templates
+│   └── pages/ # Generic page layouts
+├── <module_name>/ # Module-specific widgets
+│   ├── bars/ # Module-specific bars
+│   ├── cards/ # Module-specific cards
+│   ├── views/ # Module-specific views
+│   ├── forms/ # Module-specific forms
+│   ├── screens/ # Module-specific screens
+│   └── pages/ # Module-specific pages
+```
+## UI Components
+
+- **Atomic widgets** (buttons, cards, forms) in `app/presentation/widgets/common/`.
+- **Feature-specific** in subdirectories (e.g., `chat/`, `entertainment/`).
+- **Composition**: build screens by assembling atoms into molecules (bars, cards, views).
+- **Message positioning**: user messages right, agent left; with proper RTL support fileciteturn0file6.
+
+
+
+## Key Rules
+- **No feature module should import another module's code directly**
+- **Feature modules should not contain large widget implementations directly**
+- **All UI building blocks are in the central widget layer**
+- **Modules compose screens using widgets from the shared app module**
+description:
+globs:
+alwaysApply: false
+---
