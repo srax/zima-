@@ -1,10 +1,7 @@
-import 'package:deepfake/agent/apis/transcript_service.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../../auth/presentation/screens/login_screen.dart';
-import '../apis/did_api.dart';
-import '../../auth/apis/auth_api.dart';
-import 'package:record/record.dart' as rec;
+import '../application/agent_controller_provider.dart';
+import '../../../app/presentation/widgets/widgets.dart';
 
 class AgentPage extends StatefulWidget {
   final String agentId;
@@ -15,290 +12,19 @@ class AgentPage extends StatefulWidget {
 }
 
 class _AgentPageState extends State<AgentPage> {
-  final _txt = TextEditingController();
-  late RTCVideoRenderer _video;
-  RTCPeerConnection? _pc;
-  late final TranscriptService _ts;
-  // Use concrete AudioRecorder from record 5.x
-  final rec.AudioRecorder _recorder = rec.AudioRecorder();
-  bool _recActive = false;
-
-  // Flag to ensure the auto-sent "hello" happens only once per page lifecycle.
-  bool _initialHelloSent = false;
-
-  String? _chatId, _streamId, _sessionId;
-  List<Map<String, dynamic>> _ice = [];
-
-  bool _loading = true;
-  String? _error;
-  String? _avatarUrl;
-
-  // Default avatar URL (can be replaced with agent's avatar if available)
-  static const _defaultAvatarUrl =
-      'https://studio.d-id.com/agents-assets/avatars/anna_square.png';
+  late AgentControllerProvider _controllerProvider;
 
   @override
   void initState() {
     super.initState();
-    _ts = TranscriptService(onTranscript: _onTranscript);
-    _video = RTCVideoRenderer();
-    _video.initialize().then((_) async {
-      await _ts.connect(); // ➊ open WS and start_session
-      await _initAgentAndBootstrap();
-    });
-    _video.onFirstFrameRendered = () => debugPrint('✅ first video frame');
-    _video.onResize = () => setState(() {}); // reflect resolution changes
+    _controllerProvider = AgentControllerProvider();
+    _controllerProvider.initialize(widget.agentId);
   }
 
-  /* ───── Transcript → chat message ───── */
-  Future<void> _onTranscript(String text) async {
-    if (text.trim().isEmpty || _chatId == null) return;
-    try {
-      await DidApi.sendMessage(
-        widget.agentId,
-        _chatId!,
-        _streamId!,
-        _sessionId!,
-        text,
-      );
-    } catch (_) {
-      /* ignore – UI already shows send errors */
-    }
-  }
-
-  Future<void> _initAgentAndBootstrap() async {
-    setState(() => _loading = true);
-    try {
-      // Fetch agent info to get avatar
-      final agentsMap = await DidApi.fetchAgents();
-      final allAgents = agentsMap['all'] ?? [];
-      final mineAgents = agentsMap['mine'] ?? [];
-      final allCombined = [...allAgents, ...mineAgents];
-      final agent = allCombined.firstWhere(
-        (a) => a['id'] == widget.agentId,
-        orElse: () => {},
-      );
-      _avatarUrl = agent.isNotEmpty && agent['preview_thumbnail'] != null
-          ? agent['preview_thumbnail'] as String
-          : 'https://studio.d-id.com/agents-assets/avatars/anna_square.png';
-      await _bootstrap();
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to fetch agent info: $e';
-        _loading = false;
-      });
-    }
-  }
-
-  String _patchSdpForAppleH264(String sdp) {
-    const h264Line = 'a=rtpmap:102 H264/90000';
-    const fmtpLine =
-        'a=fmtp:102 packetization-mode=1;profile-level-id=42e01f;level-asymmetry-allowed=1';
-
-    // If the offer already contains a fmtp for PT 102 we leave it untouched.
-    final hasFmtp102 = RegExp(r'^a=fmtp:102 .*', multiLine: true).hasMatch(sdp);
-    if (sdp.contains(h264Line) && !hasFmtp102) {
-      // Inject the fmtp line immediately after the rtpmap line.
-      sdp = sdp.replaceFirst(h264Line, '$h264Line\r\n$fmtpLine');
-    }
-    return sdp;
-  }
-
-  /* ───────────────── bootstrap ───────────────── */
-  Future<void> _bootstrap() async {
-    try {
-      debugPrint('Calling createChat for agent: ${widget.agentId}');
-      final chatResponse = await DidApi.createChat(widget.agentId);
-      debugPrint('createChat response: $chatResponse');
-      _chatId = chatResponse['id'] as String?;
-      if (_chatId == null || _chatId!.isEmpty) {
-        setState(() {
-          _error = 'createChat did not return a valid chat id.';
-          _loading = false;
-        });
-        return;
-      }
-
-      debugPrint(
-        'Calling createStream for agent: ${widget.agentId} with avatar: $_avatarUrl',
-      );
-      final streamResponse = await DidApi.createStream(
-        widget.agentId,
-        _avatarUrl!,
-      );
-      debugPrint('createStream response: $streamResponse');
-      if (streamResponse['id'] == null ||
-          streamResponse['session_id'] == null ||
-          streamResponse['ice_servers'] == null ||
-          streamResponse['offer'] == null) {
-        setState(() {
-          _error =
-              'createStream response missing required fields: $streamResponse';
-          _loading = false;
-        });
-        return;
-      }
-      _streamId = streamResponse['id'];
-      _sessionId = streamResponse['session_id'];
-      _ice = List<Map<String, dynamic>>.from(
-        streamResponse['ice_servers'] ?? [],
-      );
-
-      _pc = await createPeerConnection({
-        'iceServers': _ice,
-        'sdpSemantics': 'unified-plan', // Better cross-platform behaviour
-      });
-
-      // Explicitly tell the peer connection we want to RECEIVE audio & video.
-      await _pc!.addTransceiver(
-        kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
-        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
-      );
-      await _pc!.addTransceiver(
-        kind: RTCRtpMediaType.RTCRtpMediaTypeVideo,
-        init: RTCRtpTransceiverInit(direction: TransceiverDirection.RecvOnly),
-      );
-
-      _pc!
-        ..onIceCandidate = _onIce
-        ..onIceConnectionState = (st) => debugPrint('ICE $st');
-      _pc!.onTrack = (e) {
-        debugPrint(
-          'onTrack: kind=${e.track.kind}, streams=${e.streams.length}',
-        );
-        // Ensure we only attach the media stream when a *video* track is
-        // available. On some platforms (notably iOS) the audio track may
-        // arrive first which can cause a black frame if the renderer is
-        // initialised too early.
-        final hasVideo = e.track.kind == 'video';
-        if (hasVideo && e.streams.isNotEmpty) {
-          _video.srcObject = e.streams.first;
-          // Re-initialise after attaching the stream – on some macOS/iOS builds
-          // the underlying RTCMTLVideoView doesn’t produce frames unless the
-          // renderer is (re)initialised with an active track.
-          _video.initialize().catchError((_) {});
-          setState(() {}); // rebuild for first video frame
-        }
-      };
-
-      final offerObj = streamResponse['offer'];
-      final remoteSdp = offerObj is Map
-          ? offerObj['sdp'] as String
-          : offerObj as String;
-
-      final patchedSdp = _patchSdpForAppleH264(remoteSdp);
-
-      await _pc!.setRemoteDescription(
-        RTCSessionDescription(patchedSdp, 'offer'),
-      );
-
-      final answer = await _pc!.createAnswer();
-      await _pc!.setLocalDescription(answer);
-      await DidApi.sendAnswer(
-        widget.agentId,
-        _streamId!,
-        _sessionId!,
-        answer.sdp!,
-      );
-
-      await _sendInitialHello();
-
-      if (mounted) setState(() => _loading = false);
-    } on UnauthenticatedException {
-      _kickToLogin();
-    } catch (e, st) {
-      debugPrint('WebRTC signaling error: $e\n$st');
-      if (mounted) setState(() => _error = 'WebRTC signaling error: $e');
-    }
-  }
-
-  /* ───────────────── ICE ───────────────── */
-  Future<void> _onIce(RTCIceCandidate c) async {
-    try {
-      await DidApi.sendIce(widget.agentId, _streamId!, _sessionId!, {
-        'candidate': c.candidate,
-        'sdpMid': c.sdpMid,
-        'sdpMLineIndex': c.sdpMLineIndex,
-      });
-    } on UnauthenticatedException {
-      _kickToLogin();
-    }
-  }
-
-  /* ───────────────── chat ───────────────── */
-  Future<void> _send() async {
-    final text = _txt.text.trim();
-    if (text.isEmpty || _loading || _error != null) return;
-    _txt.clear();
-    try {
-      await DidApi.sendMessage(
-        widget.agentId,
-        _chatId!,
-        _streamId!,
-        _sessionId!,
-        text,
-      );
-    } on UnauthenticatedException {
-      _kickToLogin();
-    }
-  }
-
-  /* ─── Automatic initial message ─── */
-  Future<void> _sendInitialHello() async {
-    if (_initialHelloSent ||
-        _chatId == null ||
-        _streamId == null ||
-        _sessionId == null) {
-      return;
-    }
-    try {
-      await DidApi.sendMessage(
-        widget.agentId,
-        _chatId!,
-        _streamId!,
-        _sessionId!,
-        'hello',
-      );
-      _initialHelloSent = true;
-    } catch (e) {
-      debugPrint('Failed to send initial hello: $e');
-    }
-  }
-
-  /* ───── Voice button handlers ───── */
-  Future<void> _toggleVoice() async {
-    if (_recActive) {
-      await _recorder.stop();
-      _ts.mute(); // ➋ stop stream → mute → transcription
-    } else {
-      // Start microphone capture and forward PCM chunks to the transcript
-      // service while un-muted.
-      final stream = await _recorder.startStream(
-        const rec.RecordConfig(
-          encoder: rec.AudioEncoder.pcm16bits,
-          sampleRate: 16000,
-          numChannels: 1,
-        ),
-      );
-      stream.listen(_ts.sendAudioChunk);
-      _ts.unmute(); // ➌ unmute first, then chunks will flow
-    }
-    setState(() => _recActive = !_recActive);
-  }
-
-  /* ───────────────── helpers ───────────────── */
-  // Converts internal S3 URLs ("s3://bucket/key") to a public HTTPS endpoint
-  String _toPublicUrl(String url) {
-    if (url.startsWith('s3://')) {
-      final withoutScheme = url.substring('s3://'.length);
-      final firstSlash = withoutScheme.indexOf('/');
-      if (firstSlash > 0) {
-        final bucket = withoutScheme.substring(0, firstSlash);
-        final key = withoutScheme.substring(firstSlash + 1);
-        return 'https://$bucket.s3.amazonaws.com/$key';
-      }
-    }
-    return url; // already public
+  @override
+  void dispose() {
+    _controllerProvider.dispose();
+    super.dispose();
   }
 
   void _kickToLogin() {
@@ -309,115 +35,67 @@ class _AgentPageState extends State<AgentPage> {
     );
   }
 
-  /* ───────────────── cleanup ───────────────── */
   @override
-  void dispose() {
-    _ts.dispose();
-    _recorder.dispose();
-    DidApi.deleteStream(widget.agentId, _streamId ?? '');
-    _pc?.close();
-    _video.dispose();
-    _txt.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: _buildAppBar(),
+      body: ListenableBuilder(
+        listenable: _controllerProvider,
+        builder: (context, child) {
+          final controller = _controllerProvider.controller;
+          if (controller == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          return Stack(
+            children: [
+              // Main content
+              Column(
+                children: [
+                  // Video player
+                  Expanded(
+                    child: VideoPlayerWidget(
+                      videoRenderer: controller.video,
+                      isLoading: controller.isLoading,
+                      errorMessage: controller.error,
+                    ),
+                  ),
+
+                  // Chat input
+                  ChatInputWidget(
+                    controller: controller.textController,
+                    onSend: controller.sendMessage,
+                    onVoiceRecord: controller.toggleVoiceRecording,
+                    isRecording: controller.isRecording,
+                    isLoading: controller.isLoading,
+                  ),
+                ],
+              ),
+
+              // Connection status overlay
+              ConnectionStatusWidget(
+                isLoading: controller.isLoading,
+                errorMessage: controller.error,
+                onRetry: controller.retry,
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
-  /* ───────────────── UI ───────────────── */
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text('D-ID Live Agent (${widget.agentId})'),
-      actions: [
-        IconButton(
-          tooltip: 'Logout',
-          icon: const Icon(Icons.logout),
-          onPressed: () => _kickToLogin(),
-        ),
-      ],
-    ),
-    body: Stack(
-      children: [
-        Column(
-          children: [
-            Expanded(
-              child: RTCVideoView(
-                _video,
-                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                filterQuality: FilterQuality.high, // iOS release tweak
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(8),
-              color: Colors.black12,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _txt,
-                      enabled: !_loading && _error == null,
-                      decoration: const InputDecoration(
-                        hintText: 'Say something…',
-                      ),
-                      onSubmitted: (_) => _send(),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send),
-                    onPressed: _loading || _error != null ? null : _send,
-                  ),
-                  IconButton(
-                    tooltip: 'Hold to talk',
-                    icon: Icon(
-                      _recActive ? Icons.mic : Icons.mic_none,
-                      color: _recActive ? Colors.red : null,
-                    ),
-                    onPressed: _loading || _error != null ? null : _toggleVoice,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+  PreferredSizeWidget _buildAppBar() {
+    final controller = _controllerProvider.controller;
+    if (controller == null) {
+      return AppBar(title: const Text('Agent'));
+    }
 
-        // loading overlay
-        if (_loading)
-          Container(
-            color: Colors.black45,
-            child: const Center(
-              child: CircularProgressIndicator(strokeWidth: 4),
-            ),
-          ),
-
-        // error overlay
-        if (_error != null && !_loading)
-          Container(
-            color: Colors.black54,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error, color: Colors.red, size: 48),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Failed to load agent.\n [39m [22m [49m$_error',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    child: const Text('Retry'),
-                    onPressed: () {
-                      setState(() {
-                        _loading = true;
-                        _error = null;
-                      });
-                      _bootstrap();
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    ),
-  );
+    return AgentHeaderWidget(
+      agentId: widget.agentId,
+      onLogout: _kickToLogin,
+      avatarUrl: controller.avatarUrl,
+      isLoading: controller.isLoading,
+    );
+  }
 }
