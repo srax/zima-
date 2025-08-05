@@ -5,6 +5,8 @@ import 'onboarding/presentation/splash_screen.dart';
 import 'onboarding/providers/onboarding_provider.dart';
 import 'auth/application/providers/auth_provider.dart';
 import 'auth/presentation/screens/login_screen.dart';
+import 'wallet/providers/wallet_provider.dart';
+import 'wallet/presentation/wallet_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,13 +21,17 @@ class MyApp extends StatelessWidget {
     providers: [
       ChangeNotifierProvider(create: (_) => OnboardingProvider()),
       ChangeNotifierProvider(create: (_) => AuthProvider()),
+      ChangeNotifierProvider(create: (_) => WalletProvider()),
     ],
     child: MaterialApp(
       title: 'D-ID Agent',
       theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
       debugShowCheckedModeBanner: false,
       home: const AppRouter(),
-      routes: {'/login': (context) => const LoginScreen()},
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/wallet': (context) => const WalletPage(),
+      },
     ),
   );
 }

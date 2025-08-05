@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../agent/presentation/screens/agents_list_screen.dart';
+import '../../wallet/presentation/wallet_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,10 +14,10 @@ class _HomePageState extends State<HomePage> {
 
   static final List<Widget> _pages = <Widget>[
     AgentsListScreen(),
+    WalletPage(), // Solana Wallet integration
     Center(child: Text('Settings')), // Will be replaced with SettingsPage
     Center(child: Text('Profile')), // Will be replaced with ProfilePage
     Center(child: Text('Chat')), // Will be replaced with ChatPage
-    Center(child: Text('About')), // Will be replaced with AboutPage
   ];
 
   void _onItemTapped(int index) {
@@ -34,12 +35,15 @@ class _HomePageState extends State<HomePage> {
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.people), label: 'Agents'),
           BottomNavigationBarItem(
+            icon: Icon(Icons.account_balance_wallet),
+            label: 'Wallet',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.settings),
             label: 'Settings',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.info), label: 'About'),
         ],
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
